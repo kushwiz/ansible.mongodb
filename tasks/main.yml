@@ -1,0 +1,53 @@
+---
+# tasks file for kushwiz.mongodb
+
+- group: name=mongodb state=present
+- user: name=mongodb uid=1040 group=mongodb
+
+- apt: update_cache=yes
+- apt: name=numactl state=latest
+- apt: name=python-pip state=latest
+- pip: name=pymongo state=latest
+
+- name: Is MongoDB already available?
+  stat: path=/opt/mongodb-linux-i686-3.0.4.tgz
+  register: mongodb_archive_stat
+
+- name: download MongoDB
+  get_url: url=http://fastdl.mongodb.org/linux/mongodb-linux-i686-3.0.4.tgz dest=/opt mode=0440
+  when: mongodb_archive_stat.stat.isreg is not defined
+
+- name: extract archive
+  unarchive: src=/opt/mongodb-linux-i686-3.0.4.tgz dest=/opt copy=no
+
+- name: symlink directory
+  file: src=/opt/mongodb-linux-i686-3.0.4 dest=/opt/mongodb state=link
+
+- name: Create the conf file
+  template: src=mongod_conf.j2 dest=/etc/mongod.conf mode=0655
+
+- name: Create the init script
+  template: src=init_mongo.j2 dest=/etc/init.d/mongodb mode=0655
+
+- name: Copying keyfile
+  template: src=mongod_keyfile.j2 dest=/opt/mongodb/keyfile mode=0655 owner=mongodb group=mongodb
+
+- name: Create db directory
+  file: path=/data/db state=directory mode=0755 owner=mongodb group=mongodb
+  sudo: yes
+
+- name: Create pid directory
+  file: path=/var/run/mongodb state=directory mode=0655 owner=mongodb group=mongodb
+  sudo: yes
+- file: path=/var/run/mongodb/mongod.pid state=touch mode=0655 owner=mongodb group=mongodb
+
+- name: Create log directory
+  file: path=/var/log/mongodb state=directory mode=0655 owner=mongodb group=mongodb
+  sudo: yes
+
+- name: Starting up MongoDB
+  service: name=mongodb state=started
+  sudo: yes
+
+- name: Create admin user
+  mongodb_user: database=admin name=db_admin password=Welcome state=present roles="dbAdmin"
